@@ -1,0 +1,16 @@
+meta {
+  name: List Tasks
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/tasks/
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+

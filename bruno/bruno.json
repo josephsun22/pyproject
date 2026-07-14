@@ -1,0 +1,7 @@
+{
+  "version": "1",
+  "name": "Django React Task API",
+  "type": "collection",
+  "ignore": ["node_modules", ".git"]
+}
+
