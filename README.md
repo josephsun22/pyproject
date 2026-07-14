@@ -51,6 +51,12 @@ npm run dev
 
 Open <http://localhost:5173>. Vite forwards `/api` requests to Django at <http://127.0.0.1:8000>, so no CORS configuration is needed for this development workflow.
 
+## Bruno API collection
+
+Open the `bruno` directory in the Bruno desktop app and select the `Local` environment. Start Django on port 8000 before sending requests.
+
+Each request is standalone. Send **Create Task**, copy the returned `id`, and set `taskId` in `bruno/environments/Local.bru` before using the retrieve, update, or delete requests. The final two requests demonstrate the API's blank-title and 200-character title-limit validation.
+
 ## Django admin
 
 Create an administrator:
@@ -69,7 +75,7 @@ Backend:
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python backend\manage.py check
-python backend\manage.py test
+python backend\manage.py test tasks
 python backend\manage.py makemigrations --check --dry-run
 ```
 
@@ -119,5 +125,7 @@ backend/
   tasks/        Task model, API, admin, migration, and tests
 frontend/
   src/          React components, API client, styles, and tests
+bruno/
+  Tasks/        Standalone task CRUD and validation requests
+  environments/ Bruno environment variables for local development
 ```
-
