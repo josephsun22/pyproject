@@ -22,4 +22,3 @@ Add a native Bruno collection that lets developers manually exercise every publi
 
 - Extend the root README with instructions for opening `bruno/`, selecting `Local`, starting Django, and manually updating `taskId` after creating a task.
 - Verify the collection file structure and syntax. If Bruno CLI is unavailable locally, document that limitation and validate the requests against the live Django API using equivalent HTTP calls.
-
