@@ -1,5 +1,7 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
@@ -20,6 +22,18 @@ function jsonResponse(body: unknown, status = 200) {
   )
 }
 
+function renderApp(ui: ReactElement = <App />) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  )
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -32,7 +46,7 @@ describe('App', () => {
     })
     vi.stubGlobal('fetch', vi.fn(() => pendingLoad))
 
-    render(<App />)
+    renderApp()
 
     const input = screen.getByRole('textbox', { name: 'Task title' })
     const button = screen.getByRole('button', { name: 'Add task' })
@@ -53,7 +67,7 @@ describe('App', () => {
   it('shows loading and then an empty state', async () => {
     vi.stubGlobal('fetch', vi.fn(() => jsonResponse([])))
 
-    render(<App />)
+    renderApp()
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading tasks')
     expect(await screen.findByText('No tasks yet')).toBeInTheDocument()
@@ -67,7 +81,7 @@ describe('App', () => {
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<App />)
+    renderApp()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       "We couldn't load your tasks",
@@ -83,10 +97,11 @@ describe('App', () => {
       .fn()
       .mockImplementationOnce(() => jsonResponse([]))
       .mockImplementationOnce(() => jsonResponse(task, 201))
+      .mockImplementationOnce(() => jsonResponse([task]))
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<App />)
+    renderApp()
     await screen.findByText('No tasks yet')
     const input = screen.getByRole('textbox', { name: 'Task title' })
     await user.type(input, task.title)
@@ -94,7 +109,7 @@ describe('App', () => {
 
     expect(await screen.findByText(task.title)).toBeInTheDocument()
     expect(input).toHaveValue('')
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       '/api/tasks/',
       expect.objectContaining({
         method: 'POST',
@@ -113,11 +128,12 @@ describe('App', () => {
       vi
         .fn()
         .mockImplementationOnce(() => jsonResponse([]))
-        .mockImplementationOnce(() => pendingCreate),
+        .mockImplementationOnce(() => pendingCreate)
+        .mockImplementationOnce(() => jsonResponse([task])),
     )
     const user = userEvent.setup()
 
-    render(<App />)
+    renderApp()
     await screen.findByText('No tasks yet')
     const input = screen.getByRole('textbox', { name: 'Task title' })
     await user.type(input, task.title)
@@ -147,7 +163,7 @@ describe('App', () => {
     )
     const user = userEvent.setup()
 
-    render(<App />)
+    renderApp()
     await screen.findByText('No tasks yet')
     await user.type(screen.getByRole('textbox', { name: 'Task title' }), 'Taken')
     await user.click(screen.getByRole('button', { name: 'Add task' }))
@@ -161,14 +177,16 @@ describe('App', () => {
     const pendingPatch = new Promise<Response>((resolve) => {
       resolvePatch = resolve
     })
+    const updated = { ...task, completed: true }
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(() => jsonResponse([task]))
       .mockImplementationOnce(() => pendingPatch)
+      .mockImplementationOnce(() => jsonResponse([updated]))
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<App />)
+    renderApp()
     const checkbox = await screen.findByRole('checkbox', {
       name: `Mark ${task.title} complete`,
     })
@@ -176,7 +194,7 @@ describe('App', () => {
 
     expect(checkbox).toBeDisabled()
     expect(checkbox).not.toBeChecked()
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       '/api/tasks/1/',
       expect.objectContaining({
         method: 'PATCH',
@@ -185,7 +203,7 @@ describe('App', () => {
     )
 
     resolvePatch(
-      new Response(JSON.stringify({ ...task, completed: true }), {
+      new Response(JSON.stringify(updated), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -203,7 +221,7 @@ describe('App', () => {
     )
     const user = userEvent.setup()
 
-    render(<App />)
+    renderApp()
     const checkbox = await screen.findByRole('checkbox', {
       name: `Mark ${task.title} complete`,
     })
@@ -221,17 +239,18 @@ describe('App', () => {
       .fn()
       .mockImplementationOnce(() => jsonResponse([task]))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockImplementationOnce(() => jsonResponse([]))
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
-    render(<App />)
+    renderApp()
     await screen.findByText(task.title)
     await user.click(
       screen.getByRole('button', { name: `Delete ${task.title}` }),
     )
 
     expect(await screen.findByText('No tasks yet')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       '/api/tasks/1/',
       expect.objectContaining({ method: 'DELETE' }),
     )
