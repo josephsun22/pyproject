@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 
 import './App.css'
@@ -7,33 +8,68 @@ import { TaskForm } from './components/TaskForm'
 import { TaskList } from './components/TaskList'
 import type { Task } from './types'
 
-type LoadState = 'loading' | 'loaded' | 'error'
+const tasksQueryKey = ['tasks'] as const
 
 function App() {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [loadState, setLoadState] = useState<LoadState>('loading')
+  const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
   const [titleError, setTitleError] = useState('')
   const [actionError, setActionError] = useState('')
-  const [isCreating, setIsCreating] = useState(false)
-  const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([])
 
-  const load = useCallback(async () => {
-    setLoadState('loading')
-    setActionError('')
-    try {
-      setTasks(await listTasks())
-      setLoadState('loaded')
-    } catch {
-      setLoadState('error')
-    }
-  }, [])
+  const tasksQuery = useQuery({
+    queryKey: tasksQueryKey,
+    queryFn: listTasks,
+  })
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  const createMutation = useMutation({
+    mutationFn: (nextTitle: string) => createTask(nextTitle),
+    onSuccess: async () => {
+      setTitle('')
+      setTitleError('')
+      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.fieldErrors.title?.[0]) {
+        setTitleError(error.fieldErrors.title[0])
+      } else {
+        setActionError("We couldn't add that task. Please try again.")
+      }
+    },
+  })
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  const updateMutation = useMutation({
+    mutationFn: ({ id, completed }: { id: number; completed: boolean }) =>
+      updateTask(id, completed),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+    },
+    onError: () => {
+      setActionError("We couldn't update that task. Your list was not changed.")
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteTask(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+    },
+    onError: () => {
+      setActionError("We couldn't delete that task. Your list was not changed.")
+    },
+  })
+
+  const tasks = tasksQuery.data ?? []
+  const isLoaded = tasksQuery.isSuccess
+  const pendingTaskIds = [
+    ...(updateMutation.isPending && updateMutation.variables
+      ? [updateMutation.variables.id]
+      : []),
+    ...(deleteMutation.isPending && deleteMutation.variables != null
+      ? [deleteMutation.variables]
+      : []),
+  ]
+
+  function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmedTitle = title.trim()
 
@@ -42,59 +78,19 @@ function App() {
       return
     }
 
-    setIsCreating(true)
     setTitleError('')
     setActionError('')
-
-    try {
-      const created = await createTask(trimmedTitle)
-      setTasks((current) => [created, ...current])
-      setTitle('')
-    } catch (error) {
-      if (error instanceof ApiError && error.fieldErrors.title?.[0]) {
-        setTitleError(error.fieldErrors.title[0])
-      } else {
-        setActionError("We couldn't add that task. Please try again.")
-      }
-    } finally {
-      setIsCreating(false)
-    }
+    createMutation.mutate(trimmedTitle)
   }
 
-  function markPending(id: number, pending: boolean) {
-    setPendingTaskIds((current) =>
-      pending
-        ? [...current, id]
-        : current.filter((pendingId) => pendingId !== id),
-    )
-  }
-
-  async function handleToggle(task: Task) {
-    markPending(task.id, true)
+  function handleToggle(task: Task) {
     setActionError('')
-    try {
-      const updated = await updateTask(task.id, !task.completed)
-      setTasks((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      )
-    } catch {
-      setActionError("We couldn't update that task. Your list was not changed.")
-    } finally {
-      markPending(task.id, false)
-    }
+    updateMutation.mutate({ id: task.id, completed: !task.completed })
   }
 
-  async function handleDelete(task: Task) {
-    markPending(task.id, true)
+  function handleDelete(task: Task) {
     setActionError('')
-    try {
-      await deleteTask(task.id)
-      setTasks((current) => current.filter((item) => item.id !== task.id))
-    } catch {
-      setActionError("We couldn't delete that task. Your list was not changed.")
-    } finally {
-      markPending(task.id, false)
-    }
+    deleteMutation.mutate(task.id)
   }
 
   const completedCount = tasks.filter((task) => task.completed).length
@@ -115,7 +111,7 @@ function App() {
             <p className="section-kicker">Your list</p>
             <h2 id="task-heading">Today&apos;s tasks</h2>
           </div>
-          {loadState === 'loaded' && tasks.length > 0 ? (
+          {isLoaded && tasks.length > 0 ? (
             <p className="task-count" aria-live="polite">
               {completedCount} of {tasks.length} complete
             </p>
@@ -125,8 +121,8 @@ function App() {
         <TaskForm
           title={title}
           error={titleError}
-          isCreating={isCreating}
-          isAvailable={loadState === 'loaded'}
+          isCreating={createMutation.isPending}
+          isAvailable={isLoaded}
           onTitleChange={(nextTitle) => {
             setTitle(nextTitle)
             if (titleError) setTitleError('')
@@ -140,26 +136,32 @@ function App() {
           </p>
         ) : null}
 
-        {loadState === 'loading' ? (
+        {tasksQuery.isPending ? (
           <div className="state-panel" role="status">
             <span className="spinner" aria-hidden="true" />
             Loading tasks…
           </div>
         ) : null}
 
-        {loadState === 'error' ? (
+        {tasksQuery.isError ? (
           <div className="state-panel state-error" role="alert">
             <div>
               <strong>We couldn&apos;t load your tasks.</strong>
               <p>Check that Django is running, then try again.</p>
             </div>
-            <button className="secondary-button" type="button" onClick={load}>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                void tasksQuery.refetch()
+              }}
+            >
               Retry
             </button>
           </div>
         ) : null}
 
-        {loadState === 'loaded' && tasks.length === 0 ? (
+        {isLoaded && tasks.length === 0 ? (
           <div className="empty-state">
             <span aria-hidden="true">✓</span>
             <strong>No tasks yet</strong>
@@ -167,7 +169,7 @@ function App() {
           </div>
         ) : null}
 
-        {loadState === 'loaded' && tasks.length > 0 ? (
+        {isLoaded && tasks.length > 0 ? (
           <TaskList
             tasks={tasks}
             pendingTaskIds={pendingTaskIds}
