@@ -18,12 +18,19 @@ class SimpleLoggingMiddleware:
 
         duration_ms = (time.monotonic() - start) * 1000
         response["X-Request-Duration-Ms"] = f"{duration_ms:.2f}"
+        client_ip = (
+            request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip()
+            or request.META.get("REMOTE_ADDR", "-")
+        )
+        user_agent = request.META.get("HTTP_USER_AGENT", "-")
         logger.info(
-            "LoggingMiddleware: %s %s -> %s (%.2fms)",
+            "LoggingMiddleware: %s %s -> %s (%.2fms) client=%s ua=%s",
             request.method,
             request.path,
             response.status_code,
             duration_ms,
+            client_ip,
+            user_agent,
         )
 
         return response

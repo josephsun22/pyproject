@@ -11,5 +11,13 @@ frontend/dist/
 frontend/coverage/
 
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .DS_Store
+
+backend-dotnet/bin/
+backend-dotnet/obj/
+backend-dotnet/*.db
+backend-dotnet/*.db-shm
+backend-dotnet/*.db-wal

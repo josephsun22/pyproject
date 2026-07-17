@@ -1,6 +1,11 @@
 # Django + React Task App
 
-A small full-stack task list with a Django REST API and a React TypeScript frontend. Django stores tasks in SQLite; Vite serves the frontend and proxies `/api` requests to Django during local development.
+A small full-stack task list with a React TypeScript frontend and a choice of two interchangeable backends that expose the same REST API on port 8000:
+
+- Django + Django REST Framework (`backend/`), the original backend.
+- ASP.NET Core 10 + EF Core (`backend-dotnet/`), a drop-in, contract-identical alternative.
+
+Both store tasks in SQLite and serve the same `/api/tasks/` contract, so the frontend and the Bruno collection work unchanged against either one. Vite serves the frontend and proxies `/api` requests to whichever backend is running on `http://127.0.0.1:8000`.
 
 ## Requirements
 
@@ -56,6 +61,37 @@ Open <http://localhost:5173>. Vite forwards `/api` requests to Django at <http:/
 Open the `bruno` directory in the Bruno desktop app and select the `Local` environment. Start Django on port 8000 before sending requests.
 
 Each request is standalone. Send **Create Task**, copy the returned `id`, and set `taskId` in `bruno/environments/Local.bru` before using the retrieve, update, or delete requests. The final two requests demonstrate the API's blank-title and 200-character title-limit validation.
+
+## ASP.NET Core backend (alternative)
+
+`backend-dotnet/` is an ASP.NET Core 10 Web API (Controllers + EF Core + SQLite) that reproduces the same `/api/tasks/` contract as Django, so the React frontend and Bruno collection work against it without changes. Stop the Django server first (both use port 8000), then run one backend at a time.
+
+Requirements: the .NET 10 SDK.
+
+Run it:
+
+```powershell
+Set-Location backend-dotnet
+dotnet run
+```
+
+The API listens on <http://127.0.0.1:8000> and applies EF Core migrations automatically on startup (creating `backend-dotnet/tasks.db`). The database is separate from Django's `db.sqlite3`.
+
+Build and manage the schema:
+
+```powershell
+Set-Location backend-dotnet
+dotnet build
+dotnet ef migrations add <Name>   # requires: dotnet tool install --global dotnet-ef
+```
+
+### Debugging the .NET backend
+
+The repository ships a VS Code / Cursor debug configuration in `.vscode/`:
+
+- Open the Run and Debug panel and select **Debug .NET backend (TaskApi)**, then press F5.
+- It builds the project (`build-dotnet` task), launches Kestrel on <http://127.0.0.1:8000> in Development mode, and attaches the .NET debugger. Set breakpoints in `backend-dotnet/Controllers/TasksController.cs` (for example, in the `List` action) and hit the API to pause there.
+- The C# Dev Kit / C# extension must be installed for `coreclr` debugging.
 
 ## Django admin
 
